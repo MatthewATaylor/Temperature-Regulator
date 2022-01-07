@@ -13,9 +13,15 @@ const uint8_t DHT_PIN = 2;
 const uint8_t BACK_BUTTON_PIN = 3;
 const uint8_t FORWARD_BUTTON_PIN = 4;
 const uint8_t LCD_SWITCH_PIN = 5;
-const uint8_t RELAY_PIN = 6;
 
-const float TARGET_TEMP = 78.0f;
+const uint8_t HEAT_INTERNAL_FAN_PIN = 6;
+const uint8_t HEAT_PIN = 7;
+
+const uint8_t COOL_PIN = 10;
+const uint8_t COOL_INTERNAL_FAN_PIN = 11;
+
+const float MAX_TEMP = 76.0f;
+const float MIN_TEMP = 74.0f;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 DHT dht(DHT_PIN, DHT11);
@@ -34,8 +40,15 @@ void setup() {
   pinMode(BACK_BUTTON_PIN, INPUT);
   pinMode(FORWARD_BUTTON_PIN, INPUT);
   pinMode(LCD_SWITCH_PIN, INPUT);
-  pinMode(RELAY_PIN, OUTPUT);
+  
+  pinMode(HEAT_INTERNAL_FAN_PIN, OUTPUT);
+  pinMode(HEAT_PIN, OUTPUT);
+  pinMode(COOL_INTERNAL_FAN_PIN, OUTPUT);
+  pinMode(COOL_PIN, OUTPUT);
 }
+
+const uint32_t MILLIS_BETWEEN_FANNING = 15 * 60 * 1000;
+unsigned long lastFanningTime = 0;
 
 const uint16_t MILLIS_BETWEEN_READINGS = 30000;
 const uint16_t TEMPS_PER_RECORD = 60;  // 30 minute records 
@@ -169,6 +182,36 @@ void loop() {
   
     tempSum += temp;
     ++numTemps;
+
+    // Regulate temp
+    if (temp > MAX_TEMP) {
+      digitalWrite(COOL_PIN, HIGH);
+      if (millis() - lastFanningTime > MILLIS_BETWEEN_FANNING) {
+        lastFanningTime = millis();
+        digitalWrite(COOL_INTERNAL_FAN_PIN, HIGH);
+      }
+      else {
+        digitalWrite(COOL_INTERNAL_FAN_PIN, LOW);
+      }
+    }
+    else {
+      digitalWrite(COOL_PIN, LOW);
+      digitalWrite(COOL_INTERNAL_FAN_PIN, LOW);
+    }
+    if (temp < MIN_TEMP) {
+      digitalWrite(HEAT_PIN, HIGH);
+      if (millis() - lastFanningTime > MILLIS_BETWEEN_FANNING) {
+        lastFanningTime = millis();
+        digitalWrite(HEAT_INTERNAL_FAN_PIN, HIGH);
+      }
+      else {
+        digitalWrite(HEAT_INTERNAL_FAN_PIN, LOW);
+      }
+    }
+    else {
+      digitalWrite(HEAT_PIN, LOW);
+      digitalWrite(HEAT_INTERNAL_FAN_PIN, LOW);
+    }
   
     if (numTemps >= TEMPS_PER_RECORD) {
       for (uint8_t i = numRecordedPastTemps; i > 0; --i) {
@@ -232,12 +275,5 @@ void loop() {
   else if (!backlightIsOn && digitalRead(LCD_SWITCH_PIN)) {
     backlightIsOn = true;
     lcd.backlight();
-  }
-
-  if (dht.readTemperature(true) < TARGET_TEMP) {
-    digitalWrite(RELAY_PIN, HIGH);
-  }
-  else {
-    digitalWrite(RELAY_PIN, LOW);
   }
 }
